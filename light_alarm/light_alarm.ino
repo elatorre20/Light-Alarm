@@ -53,7 +53,7 @@ uint8_t brightness, alarm_brightness = 0; //lamp brightness
 #define SCREEN_ADDRESS 0x3C 
 #define SSD1306_NO_SPLASH
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
-char printBuf[32];
+char print_buf[32];
 
 void setup() {
 
@@ -95,7 +95,15 @@ void loop() {
       if(debounce > 50){
         if(digitalRead(ENCODER_PIN_1)){ //encoder has turned one step counterclockwise
           //do nothing in clock mode
-          if(mode == 4){ //time adjustment mode
+          if(mode == 1){ //alarm time set mode
+            if(alarm_time == 0){
+              alarm_time = 1439; //wraparound from 00:00 back to 23:59
+            }
+            else{
+              alarm_time--;
+            }
+          }
+          else if(mode == 4){ //time adjustment mode
             if(minutes == 0){
               minutes = 1439; //wraparound from 00:00 back to 23:59
             }
@@ -105,20 +113,21 @@ void loop() {
           }
           else if(mode == 5){//lamp mode
             if(brightness){
-              brightness--;
+              brightness-= 15;
             }
           }
         }
         else{ //encoder has turned one step clockwise
           //do nothing in clock mode
-          if(mode == 4){ //time adjustment mode
+          if(mode == 1){ //alarm time set mode
+            alarm_time++;
+          }
+          else if(mode == 4){ //time adjustment mode
             minutes++;
           }
           else if(mode == 5){//lamp mode
-            if(brightness){
-              if(brightness < 255){
-                brightness++;
-              }   
+            if(brightness < 255){
+              brightness += 15;   
             }
           }
         }
@@ -128,19 +137,25 @@ void loop() {
     if(display_count > 315){//write to screen
       display_count = 0;
       if(mode == 0){ //normal clock mode, display clock and wait for alarm
+        brightness = 0;
         display.clearDisplay();
         display.setTextSize(2);
         display.setCursor(15,10);
-        sprintf(printBuf, "%02d:%02d:%02d", (minutes/(uint16_t)60), (minutes%60), seconds);
-        display.print(printBuf);
+        sprintf(print_buf, "%02d:%02d:%02d", (minutes/(uint16_t)60), (minutes%60), seconds);
+        display.print(print_buf);
         display.display();
-        // Serial.println(printBuf);
+        // Serial.println(print_buf);
       }
       else if(mode == 1){ //set alarm time
         display.clearDisplay();
         display.setTextSize(1);
         display.setCursor(0,0);
         display.print(F("Set alarm time:"));
+        display.setTextSize(2);
+        display.setCursor(15,10);
+        sprintf(print_buf, "%02d:%02d:%02d", (alarm_time/(uint16_t)60), (alarm_time%60), 0);
+        display.print(print_buf);
+        display.display();
         display.display();
         // Serial.println(F("Set alarm time:"));
       }
@@ -168,8 +183,8 @@ void loop() {
         display.display();
         display.setTextSize(2);
         display.setCursor(15,10);
-        sprintf(printBuf, "%02d:%02d:%02d", (minutes/(uint16_t)60), (minutes%60), seconds);
-        display.print(printBuf);
+        sprintf(print_buf, "%02d:%02d:%02d", (minutes/(uint16_t)60), (minutes%60), seconds);
+        display.print(print_buf);
         display.display();
         // Serial.println(F("Set current time:"));
       }
@@ -178,7 +193,11 @@ void loop() {
         display.setTextSize(1);
         display.setCursor(0,0);
         display.print(F("Lamp mode: "));
-        display.setCursor(15,20);
+        display.setTextSize(2);
+        display.setCursor(30,10);
+        memset(print_buf, 0, 32);
+        sprintf(print_buf, "%03d", brightness);
+        display.print(print_buf);
         display.display();
         // Serial.println(F("Lamp mode: "));
       }
