@@ -4,10 +4,10 @@
 
 //timer 
 #define TIMER_INTERVAL 100
-volatile uint16_t timer_ticks, display_count, seconds, minutes, hours; //to keep track of time
+volatile uint16_t timer_ticks, display_count, seconds, minutes; //to keep track of time
 volatile uint32_t debounce = 0; //for debouncing the switch
 volatile uint8_t timer_period; //for task scheduling, to ensure that tasks are not repeated within 1 period
-uint16_t alarm_time; //time for the alarm to be triggered
+uint16_t alarm_time, alarm_speed; //time for the alarm to be triggered
 void timerSetup(){//period roughly in MS with a 16MHz clock. 
   //Note that if you are not using a 32u4-based MCU, you will have to change the register names/setup appropriately
   TCCR1A = 0; //no OC
@@ -21,17 +21,16 @@ ISR(TIMER1_COMPA_vect){ //timer interrupt handler
   timer_ticks++;
   debounce++; //increment debounce counter
   display_count++; //increment display counter
-  if(timer_ticks == 625){ //every 625 ticks add a second
+  if(timer_ticks >= 625){ //every 625 ticks add a second
     timer_ticks = 0;
     seconds++;
   }
-  if(seconds == 60){ //every 60 seconds add a minute
+  if(seconds >= 60){ //every 60 seconds add a minute
     seconds = 0;
     minutes++;
   }
-  if(minutes == 60){ //every 60 minutes add an hour
+  if(minutes >= 1440){ //1440 minutes in a day
     minutes = 0;
-    hours = (hours++)%24; //24 hours in a day
   }
   return true;
 }
@@ -40,11 +39,12 @@ ISR(TIMER1_COMPA_vect){ //timer interrupt handler
 #define ENCODER_PIN_0 10 //rotary encoder pins
 #define ENCODER_PIN_1 11
 #define BTN_PIN       12 //mode button pin
-uint8_t mode, encoder_0_last, encoder_1_last, btn_count = 0;   //control mode
+uint8_t mode = 0;
+uint8_t encoder_0_last = 1;   //control mode
 
 //light
 #define LAMP_PIN 3 //lamp FET pin
-uint16_t brightnes; //lamp brightness
+uint8_t brightness, alarm_brightness = 0; //lamp brightness
 
 //display 
 #define SCREEN_WIDTH 128 
@@ -83,25 +83,58 @@ void setup() {
 
 void loop() {
   if(timer_period){//only do max once per tick
+    analogWrite(LAMP_PIN, brightness); //apply lamp brightness
     if(!digitalRead(BTN_PIN)){//cant use interrupt on button pin so we have to poll and debounce it here
       if(debounce > 200){
         debounce = 0;
         mode++;
-        mode = mode % 5;
-        btn_count++;
+        mode = mode % 6;
+      }
+    }
+    if(!digitalRead(ENCODER_PIN_0)){ //poll and debounce the encoder
+      if(debounce > 50){
+        if(digitalRead(ENCODER_PIN_1)){ //encoder has turned one step counterclockwise
+          //do nothing in clock mode
+          if(mode == 4){ //time adjustment mode
+            if(minutes == 0){
+              minutes = 1439; //wraparound from 00:00 back to 23:59
+            }
+            else{
+              minutes--;
+            } 
+          }
+          else if(mode == 5){//lamp mode
+            if(brightness){
+              brightness--;
+            }
+          }
+        }
+        else{ //encoder has turned one step clockwise
+          //do nothing in clock mode
+          if(mode == 4){ //time adjustment mode
+            minutes++;
+          }
+          else if(mode == 5){//lamp mode
+            if(brightness){
+              if(brightness < 255){
+                brightness++;
+              }   
+            }
+          }
+        }
+        debounce = 0;
       }
     }
     if(display_count > 315){//write to screen
       display_count = 0;
-      Serial.println(mode);
-      if(mode == 0){ //normal mode, display clock and wait for alarm
+      if(mode == 0){ //normal clock mode, display clock and wait for alarm
         display.clearDisplay();
         display.setTextSize(2);
         display.setCursor(15,10);
-        sprintf(printBuf, "%02d:%02d:%02d", hours, minutes, seconds);
+        sprintf(printBuf, "%02d:%02d:%02d", (minutes/(uint16_t)60), (minutes%60), seconds);
         display.print(printBuf);
         display.display();
-        Serial.println(printBuf);
+        // Serial.println(printBuf);
       }
       else if(mode == 1){ //set alarm time
         display.clearDisplay();
@@ -109,7 +142,7 @@ void loop() {
         display.setCursor(0,0);
         display.print(F("Set alarm time:"));
         display.display();
-        Serial.println(F("Set alarm time:"));
+        // Serial.println(F("Set alarm time:"));
       }
       else if(mode == 2){ //set alarm brightness
         display.clearDisplay();
@@ -117,7 +150,7 @@ void loop() {
         display.setCursor(0,0);
         display.print(F("Set alarm brightness:"));
         display.display();
-        Serial.println(F("Set alarm brightness:"));
+        // Serial.println(F("Set alarm brightness:"));
       }
       else if(mode == 3){ //set alarm brightness
         display.clearDisplay();
@@ -125,15 +158,29 @@ void loop() {
         display.setCursor(0,0);
         display.print(F("Set alarm speed:"));
         display.display();
-        Serial.println(F("Set alarm speed:"));
+        // Serial.println(F("Set alarm speed:"));
       }
-      else if(mode == 4){ //lamp mode with adjustable brightness
+       else if(mode == 4){ //set current time
+        display.clearDisplay();
+        display.setTextSize(1);
+        display.setCursor(0,0);
+        display.print(F("Set current time:"));
+        display.display();
+        display.setTextSize(2);
+        display.setCursor(15,10);
+        sprintf(printBuf, "%02d:%02d:%02d", (minutes/(uint16_t)60), (minutes%60), seconds);
+        display.print(printBuf);
+        display.display();
+        // Serial.println(F("Set current time:"));
+      }
+      else if(mode == 5){ //lamp mode with adjustable brightness
         display.clearDisplay();
         display.setTextSize(1);
         display.setCursor(0,0);
         display.print(F("Lamp mode: "));
+        display.setCursor(15,20);
         display.display();
-        Serial.println(F("Lamp mode: "));
+        // Serial.println(F("Lamp mode: "));
       }
     }
   }
