@@ -186,6 +186,9 @@ void loop() {
           if(brightness > alarm_brightness){
             brightness = alarm_brightness; //do not exceed alarm max level
           }
+          if(seconds == 59){
+            brightness = alarm_brightness; //full brightness at the end of the minute
+          }
         }
         if(snoozed){
           brightness = 0; //clear brightness if not currently alarming
