@@ -3,7 +3,7 @@
 #include <Adafruit_SSD1306.h>
 
 //timer 
-#define TIMER_INTERVAL 100
+#define TIMER_INTERVAL 101
 volatile uint16_t timer_ticks, display_count, seconds, minutes; //to keep track of time
 volatile uint32_t debounce = 0; //for debouncing the switch
 volatile uint8_t timer_period; //for task scheduling, to ensure that tasks are not repeated within 1 period
@@ -14,7 +14,7 @@ void timerSetup(){//period roughly in MS with a 16MHz clock.
   TCCR1A = 0; //no OC
   TCCR1B = 0; //clear control register
   TCCR1B = (1<<CS12)|(0<<CS11)|(0<<CS10)|(0<<WGM13)|(1<<WGM12); //256 prescaler, counting up to OCR1A
-  OCR1A = TIMER_INTERVAL; //16,000,000/256/OCR1A = 625Hz
+  OCR1A = TIMER_INTERVAL; //16,000,000/256/(OCR1A-1) = 625Hz
   TIMSK1 |= (1<<OCIE1A);
 }
 ISR(TIMER1_COMPA_vect){ //timer interrupt handler
@@ -45,9 +45,9 @@ uint8_t encoder_0_last = 1;   //control mode
 
 //light
 #define LAMP_PIN 5 //lamp FET pin
-uint8_t levels[9] = {0,1,3,7,15,31,63,127,255};
+uint8_t levels[6] = {0,50,100,150,200,255};
 uint8_t brightness, lamp_brightness = 0; //lamp brightness
-uint8_t alarm_brightness = 255;
+uint8_t alarm_brightness = 0;
 
 //display 
 #define SCREEN_WIDTH 128 
@@ -115,10 +115,10 @@ void loop() {
           }
           else if(mode == 2){//alarm brightness set mode
             if(alarm_brightness == 255){
-              alarm_brightness = 225;
+              alarm_brightness = 200;
             }
-            else if(brightness){
-              alarm_brightness-= 25;
+            else if(alarm_brightness){
+              alarm_brightness-= 50;
             }
           }
           else if(mode == 3){ //time adjustment mode
@@ -131,10 +131,10 @@ void loop() {
           }
           else if(mode == 4){//lamp mode
             if(brightness == 255){
-              brightness = 225;
+              brightness = 200;
             }
             else if(brightness){
-              brightness-= 25;
+              brightness-= 50;
             }
           }
         }
@@ -147,8 +147,8 @@ void loop() {
             }
           }
           else if(mode == 2){//alarm brightness set mode
-            if(alarm_brightness < 225){
-              alarm_brightness += 25;   
+            if(alarm_brightness < 200){
+              alarm_brightness += 50;   
             }
             else{
               alarm_brightness = 255;
@@ -158,8 +158,8 @@ void loop() {
             minutes++;
           }
           else if(mode == 4){//lamp mode
-            if(brightness < 225){
-              brightness += 25;   
+            if(brightness < 200){
+              brightness += 50;   
             }
             else{
               brightness = 255;
@@ -171,12 +171,12 @@ void loop() {
     }
     if(display_count > 315){//write to screen at 2FPS
       display_count = 0;
-      sprintf(print_buf, "%02d:%02d:%02d", (minutes/(uint16_t)60), (minutes%60), seconds);
-      Serial.println(print_buf);
-      Serial.println(alarm_time);
-      Serial.println(brightness);
-      Serial.println(snoozed);
-      Serial.println(" ");
+      // sprintf(print_buf, "%02d:%02d:%02d", (minutes/(uint16_t)60), (minutes%60), seconds);
+      // Serial.println(print_buf);
+      // Serial.println(alarm_time);
+      // Serial.println(brightness);
+      // Serial.println(snoozed);
+      // Serial.println(" ");
       if(mode == 0){ //normal clock mode, display clock and wait for alarm
         if(minutes == alarm_time){ //handle the alarm
           if(seconds == 0){
@@ -221,7 +221,7 @@ void loop() {
         display.setTextSize(2);
         display.setCursor(30,10);
         memset(print_buf, 0, 32);
-        sprintf(print_buf, "%2d", (alarm_brightness/25));
+        sprintf(print_buf, "%2d", (alarm_brightness/50));
         display.print(print_buf);
         display.setCursor(0,25);
         display.setTextSize(1);
@@ -250,7 +250,7 @@ void loop() {
         display.setTextSize(2);
         display.setCursor(30,10);
         memset(print_buf, 0, 32);
-        sprintf(print_buf, "%2d", (brightness/25));
+        sprintf(print_buf, "%2d", (brightness/50));
         display.print(print_buf);
         display.display();
         // Serial.println(F("Lamp mode: "));
