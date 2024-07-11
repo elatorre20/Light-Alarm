@@ -1,15 +1,16 @@
 #include <Wire.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
+#include <TimeLib.h>
 
 //timer 
 #define TIMER_INTERVAL 101
-volatile uint16_t timer_ticks, display_count, seconds, minutes; //to keep track of time
+volatile uint16_t timer_ticks, display_count, seconds, minutes, time_update_flag; //to keep track of time
 volatile uint32_t debounce = 0; //for debouncing the switch
 volatile uint8_t timer_period; //for task scheduling, to ensure that tasks are not repeated within 1 period
-uint16_t alarm_time = 1; //time for the alarm to be triggered, default 7:00
+uint16_t alarm_time = 420; //time for the alarm to be triggered, default 7:00
 uint8_t snoozed = 1; //whether the user has hit the button after the alarm triggers
-void timerSetup(){//period roughly in MS with a 16MHz clock. 
+void timerSetup(){//period in MS with a 16MHz clock. 
   //Note that if you are not using a 32u4-based MCU, you will have to change the register names/setup appropriately
   TCCR1A = 0; //no OC
   TCCR1B = 0; //clear control register
@@ -24,14 +25,7 @@ ISR(TIMER1_COMPA_vect){ //timer interrupt handler
   display_count++; //increment display counter
   if(timer_ticks >= 625){ //every 625 ticks add a second
     timer_ticks = 0;
-    seconds++;
-  }
-  if(seconds >= 60){ //every 60 seconds add a minute
-    seconds = 0;
-    minutes++;
-  }
-  if(minutes >= 1440){ //1440 minutes in a day
-    minutes = 0;
+    time_update_flag = 1; //update times in main loop
   }
   return true;
 }
@@ -45,9 +39,9 @@ uint8_t encoder_0_last = 1;   //control mode
 
 //light
 #define LAMP_PIN 5 //lamp FET pin
-uint8_t levels[6] = {0,50,100,150,200,255};
-uint8_t brightness, lamp_brightness = 0; //lamp brightness
-uint8_t alarm_brightness = 0;
+uint8_t brightness = 0; //current brightness
+uint8_t lamp_brightness = 0; //lamp mode brightness
+uint8_t alarm_brightness = 150; //brightness of alarm
 
 //display 
 #define SCREEN_WIDTH 128 
@@ -60,12 +54,12 @@ char print_buf[32];
 
 void setup() {
 
-
   //debug serial
   Serial.begin(9600);
 
-  //begin scheduling timer
+  //setup time
   timerSetup();
+  setTime(0,0,0,1,1,2000); //set clock time to midnight
 
   //pin setups
   pinMode(BTN_PIN, INPUT_PULLUP);
@@ -86,6 +80,11 @@ void setup() {
 
 void loop() {
   if(timer_period){//only do max once per tick
+    if(time_update_flag){ //approximately once a second, update the number of minutes
+      seconds = second();
+      minutes = minute() + (60*hour()); //day as a number of minutes instead of hours/minutes
+      time_update_flag = 0;
+    }
     analogWrite(LAMP_PIN, brightness); //apply lamp brightness
     if(!digitalRead(BTN_PIN)){//cant use interrupt on button pin so we have to poll and debounce it here
       if(debounce > 200){
@@ -122,12 +121,7 @@ void loop() {
             }
           }
           else if(mode == 3){ //time adjustment mode
-            if(minutes == 0){
-              minutes = 1439; //wraparound from 00:00 back to 23:59
-            }
-            else{
-              minutes--;
-            } 
+            adjustTime((long)-60); //subtract one minute
           }
           else if(mode == 4){//lamp mode
             if(brightness == 255){
@@ -155,7 +149,7 @@ void loop() {
             }
           }
           else if(mode == 3){ //time adjustment mode
-            minutes++;
+            adjustTime((long)60); //add one minute
           }
           else if(mode == 4){//lamp mode
             if(brightness < 200){
